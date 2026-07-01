@@ -359,9 +359,26 @@ button {
   background: var(--user-bubble);
   padding: 11px 15px;
   border-radius: 16px 16px 4px 16px;
-  max-width: 82%;
+  max-width: 100%;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.msg-user-col {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 82%;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.attach-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .bubble-assistant {
@@ -626,7 +643,7 @@ button {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 22px;
-  padding: 8px 8px 8px 18px;
+  padding: 8px;
   box-shadow: 0 2px 14px rgba(0, 0, 0, 0.06);
   transition: border-color 0.15s;
 }
@@ -696,6 +713,86 @@ button {
 .btn-send.is-stop {
   background: var(--danger);
   font-size: 12px;
+}
+
+.composer-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.composer-error {
+  color: var(--danger);
+  font-size: 12.5px;
+  margin: 0 0 8px;
+  padding: 0 4px;
+}
+
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 260px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  color: var(--text);
+}
+
+.attach-chip svg {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.attach-chip.is-static {
+  padding: 5px 9px;
+  font-size: 12px;
+}
+
+.attach-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.attach-meta {
+  color: var(--text-faint);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.attach-remove {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  font-size: 12px;
+  padding: 0 2px;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+
+.attach-remove:hover {
+  color: var(--danger);
+}
+
+.attach-btn {
+  align-self: flex-end;
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  padding: 8px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.attach-btn:hover {
+  background: var(--bg-elev);
+  color: var(--accent);
 }
 
 .composer-note {

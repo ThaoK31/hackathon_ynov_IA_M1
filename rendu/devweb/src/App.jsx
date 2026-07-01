@@ -7,6 +7,7 @@ import Composer from './components/Composer.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import { checkConnection, streamChat } from './lib/ollama.js'
 import * as store from './lib/storage.js'
+import { expandUserContent } from './lib/attachments.js'
 
 const uid = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -98,7 +99,7 @@ export default function App() {
       try {
         await streamChat({
           model: settings.model,
-          messages: context.map((m) => ({ role: m.role, content: m.content })),
+          messages: context.map((m) => ({ role: m.role, content: expandUserContent(m) })),
           systemPrompt: settings.systemPrompt,
           temperature: settings.temperature,
           maxTokens: settings.maxTokens,
@@ -120,13 +121,19 @@ export default function App() {
   )
 
   const send = useCallback(
-    async (text) => {
-      if (streaming || !text.trim()) return
+    async (text, attachments = []) => {
+      const value = (text || '').trim()
+      if (streaming || (!value && attachments.length === 0)) return
       let conv = active
       if (!conv) conv = newConversation()
-      const userMsg = { id: uid(), role: 'user', content: text }
+      const userMsg = { id: uid(), role: 'user', content: value, attachments }
       if (!conv.title) {
-        setConversations((prev) => prev.map((c) => (c.id !== conv.id ? c : { ...c, title: titleFrom(text) })))
+        const title = value
+          ? titleFrom(value)
+          : attachments[0]
+            ? `Document : ${attachments[0].name}`
+            : 'Nouvelle conversation'
+        setConversations((prev) => prev.map((c) => (c.id !== conv.id ? c : { ...c, title })))
       }
       await runAssistant(conv.id, [...conv.messages, userMsg])
     },
