@@ -1,0 +1,21 @@
+server {
+    listen 80;
+    server_name _;
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Proxy same-origin vers le serveur d'inference : le navigateur appelle /api,
+    # nginx relaie vers Ollama. Aucun CORS, l'URL reste cote serveur.
+    location /api/ {
+        proxy_pass ${OLLAMA_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_buffering off;        # streaming NDJSON token par token
+        proxy_read_timeout 300s;
+    }
+
+    # SPA : toute autre route renvoie index.html.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
