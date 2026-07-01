@@ -93,10 +93,9 @@ Avantage : pas de CORS cote navigateur, et l'URL reelle du serveur d'inference r
 - Une garde cote client interrompt la generation si la reponse devient incoherente ou repetitive.
 - Les demandes de code sont recadrees localement sans appeler le serveur.
 
-## Tests rapides
+## Verification rapide
 
 ```bash
-npm test
 npm run build
 ```
 
@@ -121,7 +120,6 @@ Puis ouvrir [http://localhost:8080](http://localhost:8080).
 ```text
 rendu/devweb/
 ├─ docs/screenshots/       captures du rendu
-├─ scripts/                controles rapides du rendu
 ├─ src/
 │  ├─ components/          Sidebar, Composer, Message, SettingsPanel...
 │  ├─ lib/                 client Ollama, rendu Markdown, stockage local
