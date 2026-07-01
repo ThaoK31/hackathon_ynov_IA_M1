@@ -94,12 +94,34 @@ function UserMessage({ id, content, attachments, at, onRetry, onEdit }) {
 }
 
 function AssistantMessage({ content, isError, feedback, at, canRetry, onRegenerate, onFeedback }) {
+  const copyCode = async (e) => {
+    const btn = e.target.closest?.('.code-copy')
+    if (!btn) return
+    const code = btn.parentElement?.querySelector('pre code')?.textContent ?? ''
+    if (!code) return
+    try {
+      await navigator.clipboard.writeText(code)
+      btn.textContent = 'Copie'
+      btn.classList.add('copied')
+      setTimeout(() => {
+        btn.textContent = 'Copier'
+        btn.classList.remove('copied')
+      }, 1500)
+    } catch {
+      btn.textContent = 'Erreur'
+      setTimeout(() => {
+        btn.textContent = 'Copier'
+      }, 1500)
+    }
+  }
+
   return (
     <div className="msg msg-assistant">
       <span className="msg-avatar" aria-hidden="true">◆</span>
       <div className="msg-body">
         <div
           className={`bubble bubble-assistant markdown ${isError ? 'is-error' : ''}`}
+          onClick={copyCode}
           dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
         />
         {content && (

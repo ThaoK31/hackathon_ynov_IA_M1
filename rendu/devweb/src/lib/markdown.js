@@ -13,7 +13,7 @@ function escapeHtml(s) {
 function inline(s) {
   return (
     s
-      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/`([^`<]{1,90})`/g, '<code>$1</code>')
       .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
       .replace(/\*([^*]+)\*/g, '<em>$1</em>')
       // Gras ouvert mais jamais ferme (frequent avec les petits modeles) :
@@ -27,6 +27,7 @@ function inline(s) {
 // Une ligne de separation de tableau : |---|:--:|---| (contient au moins un tiret).
 const isTableSep = (l) => l.includes('-') && /^\s*\|?[\s:|-]+\|?\s*$/.test(l)
 const isTableRow = (l) => l.includes('|')
+const codeFence = (l) => l.trim().startsWith('```')
 
 function tableCells(line) {
   let s = line.trim()
@@ -35,12 +36,85 @@ function tableCells(line) {
   return s.split('|').map((c) => c.trim())
 }
 
+function normalizeMarkdown(text) {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/```([a-zA-Z0-9_-]*)/g, '\n```$1\n')
+    .replace(/\n{3,}/g, '\n\n')
+}
+
+const noisyModelPattern =
+  /\b(markdwonkbeat|heree|icie|clon|Euxin|forever onward|request code example|Here is a basic script)\b/i
+const assignmentPattern = /^\s*[A-Za-z_][A-Za-z0-9_]*\s*=\s*.+/
+const callPattern = /^\s*[A-Za-z_][A-Za-z0-9_.]*\s*\([^)]*\)\s*$/
+const pythonControlPattern = /^\s*(if|while|with|try|except|elif)\b.+:\s*$/
+const pythonForPattern = /^\s*for\s+[A-Za-z_][A-Za-z0-9_]*(\s*,\s*[A-Za-z_][A-Za-z0-9_]*)?\s+in\s+.+:\s*$/
+
+function meaningfulCodeLines(code) {
+  return code
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line && !line.startsWith('#') && !line.startsWith('//') && !line.startsWith('/*') && !line.startsWith('*'))
+}
+
+function hasCodeSignal(line) {
+  return (
+    /^(from|import)\s+\w+/.test(line) ||
+    /^(def|class)\s+[A-Za-z_][A-Za-z0-9_]*\b.*:\s*$/.test(line) ||
+    pythonForPattern.test(line) ||
+    pythonControlPattern.test(line) ||
+    /^(return|break|continue)\b/.test(line) ||
+    /^print\s*\(/.test(line) ||
+    assignmentPattern.test(line) ||
+    callPattern.test(line)
+  )
+}
+
+function isCodeLike(code) {
+  const compact = code.trim()
+  if (!compact) return false
+  const lines = meaningfulCodeLines(compact)
+  if (!lines.length) return false
+  if (lines.some((line) => noisyModelPattern.test(line) && !hasCodeSignal(line))) return false
+  return lines.some(hasCodeSignal)
+}
+
+function softenLongCodeLines(code) {
+  return code
+    .split('\n')
+    .map((line) => {
+      if (line.length < 140 || line.includes('://')) return line
+      return line
+        .replace(/\s+(?=(def|class|if __name__|if |for |while |return |print\(|import |from )\b)/g, '\n')
+        .replace(/\s+(?=[A-Za-z_][A-Za-z0-9_]*\s*=)/g, '\n')
+        .replace(/:\s+(?=(return|print\(|[A-Za-z_][A-Za-z0-9_]*\s*=))/g, ':\n  ')
+    })
+    .join('\n')
+}
+
+function stripPromptIntro(code) {
+  const lines = code.split('\n')
+  while (
+    lines.length > 1 &&
+    /^\s*#/.test(lines[0]) &&
+    /\b(Here is|Pouvez-vous|fournir|exemple de code|basic example|Question)\b/i.test(lines[0])
+  ) {
+    lines.shift()
+  }
+  return lines.join('\n').trim()
+}
+
+function renderCodeBlock(rawCode) {
+  const code = stripPromptIntro(softenLongCodeLines(rawCode.trim()))
+  if (!isCodeLike(code)) return `<p>${inline(code.split('\n').filter(Boolean).join('<br>'))}</p>`
+  return `<div class="md-code"><button type="button" class="code-copy" title="Copier le bloc de code" aria-label="Copier le bloc de code">Copier</button><pre><code>${code}</code></pre></div>`
+}
+
 export function renderMarkdown(text) {
-  const lines = escapeHtml(text).split('\n')
+  const lines = escapeHtml(normalizeMarkdown(text)).split('\n')
   const out = []
   let para = []
   let inList = false
-  let inCode = false
 
   const flushPara = () => {
     if (para.length) {
@@ -60,22 +134,17 @@ export function renderMarkdown(text) {
     const line = lines[i]
 
     // Bloc de code ```...```
-    if (line.trim().startsWith('```')) {
-      if (inCode) {
-        out.push('</code></pre>')
-        inCode = false
-      } else {
-        flushPara()
-        closeList()
-        out.push('<pre><code>')
-        inCode = true
+    if (codeFence(line)) {
+      flushPara()
+      closeList()
+      i += 1
+      const codeLines = []
+      while (i < lines.length && !codeFence(lines[i])) {
+        codeLines.push(lines[i])
+        i += 1
       }
-      i += 1
-      continue
-    }
-    if (inCode) {
-      out.push(line)
-      i += 1
+      if (i < lines.length && codeFence(lines[i])) i += 1
+      out.push(renderCodeBlock(codeLines.join('\n')))
       continue
     }
 
@@ -90,7 +159,9 @@ export function renderMarkdown(text) {
         rows.push(tableCells(lines[i]))
         i += 1
       }
-      out.push('<div class="md-table"><table><thead><tr>')
+      while (i < lines.length && isTableSep(lines[i])) i += 1
+      const tableClass = header.length > 5 ? 'md-table md-table-wide' : 'md-table'
+      out.push(`<div class="${tableClass}"><table><thead><tr>`)
       header.forEach((h) => out.push(`<th>${inline(h)}</th>`))
       out.push('</tr></thead><tbody>')
       rows.forEach((r) => {
@@ -99,6 +170,13 @@ export function renderMarkdown(text) {
         out.push('</tr>')
       })
       out.push('</tbody></table></div>')
+      continue
+    }
+
+    if (isTableSep(line)) {
+      flushPara()
+      closeList()
+      i += 1
       continue
     }
 
@@ -136,6 +214,5 @@ export function renderMarkdown(text) {
 
   flushPara()
   closeList()
-  if (inCode) out.push('</code></pre>')
   return out.join('')
 }
