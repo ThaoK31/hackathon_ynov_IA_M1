@@ -1,9 +1,23 @@
 // Client d'inference Ollama. Le navigateur reste en same-origin : il appelle /api,
 // que le proxy (Vite en dev, nginx en prod) relaie vers le serveur d'inference.
+//
+// L'endpoint fourni par l'INFRA expose /api/generate (format prompt texte),
+// pas /api/chat (format messages). On convertit donc l'historique en prompt.
 
 const API = '/api'
+
+// URL du serveur reglable a chaud (Reglages). Vide = cible du .env / local,
+// gere cote proxy Vite. Quand elle est definie, on la transmet au proxy via
+// l'en-tete x-ollama-url ; le proxy retombe sur le Ollama local si elle echoue.
+let endpointOverride = ''
+export function setEndpoint(url) {
+  endpointOverride = (url || '').trim().replace(/\/+$/, '')
+}
+function apiHeaders(extra = {}) {
+  return endpointOverride ? { ...extra, 'x-ollama-url': endpointOverride } : { ...extra }
+}
 const RESPONSE_GUARD =
-  'Consignes de sortie: reponds en francais, une seule fois, sans fragments anglais inutiles. Si la demande est hors finance/business, recadre poliment en une phrase. Ne fournis pas de code de programmation; si une demande de code arrive, propose plutot une explication metier ou une formule financiere. Pour un tableau, reste compact: 3 a 5 colonnes, libelles courts, cellules courtes. Ne recommence jamais le meme bloc ni la meme phrase.'
+  'Consignes de sortie: reponds en francais, une seule fois, sans fragments anglais inutiles ni repetition. Reponds en phrases et en listes a puces simples ; evite les tableaux Markdown (ce modele les met mal en forme). Ne fournis pas de code de programmation; si une demande de code arrive, propose plutot une explication metier ou une formule financiere. Si la demande sort de la finance/business, recadre poliment en une phrase. Ne recommence jamais le meme bloc ni la meme phrase.'
 const DEGENERATE_MESSAGE =
   "La reponse du modele a ete interrompue car elle contenait des fragments incoherents. Reformule la demande sur un cas finance/business, ou change de modele dans les Reglages."
 const REPETITION_MESSAGE =
@@ -49,11 +63,35 @@ function looksRepetitive(text) {
   return normalized.slice(0, -lastSentence.length).includes(lastSentence)
 }
 
-function looksDegenerate(text) {
+// Sortie franchement cassee (tokens parasites du modele) : reponse a jeter.
+function hasJunkMarkers(text) {
   const normalized = text.replace(/\s+/g, ' ').trim()
-  if (normalized.length < 180) return false
-  if (countMatches(normalized, badOutputMarkerPattern) >= 2) return true
-  return normalized.length > 450 && hasRepeatedPhrase(normalized)
+  return normalized.length >= 180 && countMatches(normalized, badOutputMarkerPattern) >= 2
+}
+
+// Le modele boucle : souvent un bon debut suivi de phrases qui se repetent.
+function isRepeating(text) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length >= 450 && hasRepeatedPhrase(normalized)) return true
+  return looksRepetitive(text)
+}
+
+// Ne garde que le debut coherent : s'arrete a la premiere phrase repetee, puis
+// coupe une eventuelle derniere phrase laissee en suspens.
+function keepCleanPrefix(text) {
+  const norm = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim()
+  const seen = new Set()
+  const kept = []
+  for (const sentence of norm.split(/(?<=[.!?])\s+/)) {
+    const key = sentence.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 50)
+    if (key && seen.has(key)) break
+    if (key) seen.add(key)
+    kept.push(sentence)
+  }
+  let out = kept.join(' ').trim()
+  const lastStop = Math.max(out.lastIndexOf('. '), out.lastIndexOf('! '), out.lastIndexOf('? '))
+  if (out.length > 200 && lastStop > out.length * 0.5) out = out.slice(0, lastStop + 1)
+  return out.trim()
 }
 
 export function getLocalGuardReply(messages, systemPrompt) {
@@ -63,25 +101,74 @@ export function getLocalGuardReply(messages, systemPrompt) {
   return "Je suis configure comme assistant financier de TechCorp, pas comme assistant de programmation. Je peux t'expliquer une formule, un indicateur ou un calcul metier, mais pas produire du code."
 }
 
-// Verifie que le serveur repond et recupere la liste des modeles + la latence.
-export async function checkConnection() {
+// Prompt utilisateur pour /api/generate. Le systeme part a cote (champ `system`)
+// pour qu'Ollama applique le vrai template du modele : un prompt aplati
+// "System:/User:/Assistant:" fait fuiter les consignes dans la reponse.
+function buildPrompt(messages) {
+  const turns = messages.filter((m) => m.role === 'user' || m.role === 'assistant')
+  if (turns.length === 1 && turns[0].role === 'user') return turns[0].content
+  const parts = turns.map((m) => (m.role === 'user' ? `Utilisateur: ${m.content}` : `Assistant: ${m.content}`))
+  parts.push('Assistant:')
+  return parts.join('\n\n')
+}
+
+// Verifie que le serveur repond. Essaie d'abord /api/tags ; si l'endpoint
+// Colab ne l'expose pas, on fallback sur un appel leger a /api/generate.
+export async function checkConnection(model = 'phi3') {
   const start = performance.now()
   try {
-    const res = await fetch(`${API}/tags`)
-    if (!res.ok) return { ok: false, models: [], latencyMs: null, error: `HTTP ${res.status}` }
+    const res = await fetch(`${API}/tags`, { headers: apiHeaders() })
+    if (!res.ok) {
+      if (res.status === 404) return checkConnectionGenerate(start, model)
+      return { ok: false, models: [], latencyMs: null, error: `HTTP ${res.status}` }
+    }
     const data = await res.json()
     const models = (data.models || []).map((m) => m.name)
-    return { ok: true, models, latencyMs: Math.round(performance.now() - start), error: null }
+    const source = res.headers.get('x-ollama-source')
+    return { ok: true, models, latencyMs: Math.round(performance.now() - start), error: null, source }
+  } catch (err) {
+    return checkConnectionGenerate(start, model)
+  }
+}
+
+async function checkConnectionGenerate(startedAt, model) {
+  const tryModel = async (m) => {
+    const res = await fetch(`${API}/generate`, {
+      method: 'POST',
+      headers: apiHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ model: m, prompt: '', stream: false }),
+    })
+    const latencyMs = Math.round(performance.now() - startedAt)
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '')
+      return { ok: false, models: [], latencyMs, error: `HTTP ${res.status} ${detail}`.trim() }
+    }
+    const data = await res.json().catch(() => ({}))
+    const source = res.headers.get('x-ollama-source')
+    // On ne connait pas la liste des modeles avec /api/generate ; on se contente
+    // de signaler que le serveur repond. On retourne le modele qui a fonctionne.
+    return { ok: true, models: data.model ? [data.model] : [m], latencyMs, error: null, source }
+  }
+
+  try {
+    const result = await tryModel(model)
+    if (result.ok) return result
+    // Si le modele demande n'existe pas, on tente le fallback phi3 connu sur Colab.
+    if (model !== 'phi3') return tryModel('phi3')
+    return result
   } catch (err) {
     return { ok: false, models: [], latencyMs: null, error: err.message }
   }
 }
 
-// Envoie la conversation et streame la reponse token par token (NDJSON /api/chat).
+// Envoie la conversation et streame la reponse token par token (NDJSON /api/generate).
+// Renvoie { content, metrics } ou leve une erreur.
 export async function streamChat({ model, messages, systemPrompt, temperature, maxTokens, signal, onToken, onReplace }) {
+  const startedAt = performance.now()
   const payload = {
     model,
-    messages: [{ role: 'system', content: withGuard(systemPrompt) }, ...messages],
+    system: withGuard(systemPrompt),
+    prompt: buildPrompt(messages),
     stream: true,
     options: {
       temperature,
@@ -93,9 +180,9 @@ export async function streamChat({ model, messages, systemPrompt, temperature, m
     },
   }
 
-  const res = await fetch(`${API}/chat`, {
+  const res = await fetch(`${API}/generate`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: apiHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(payload),
     signal,
   })
@@ -112,43 +199,88 @@ export async function streamChat({ model, messages, systemPrompt, temperature, m
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  let serverMetrics = null
+  let stopped = false
+  // Sortie irrecuperable (tokens parasites) : on remplace par un message clair.
   const stopWithMessage = async (message) => {
+    if (stopped) return
+    stopped = true
     full = message
     if (onReplace) onReplace(message)
     else onToken?.(`\n\n_${message}_`)
     await reader.cancel().catch(() => {})
-    return full
+  }
+  // Boucle detectee : on garde le debut coherent et on coupe la queue repetee.
+  // Si le debut est trop court pour etre utile, on bascule sur le message.
+  const stopKeepingPrefix = async (fallback) => {
+    if (stopped) return
+    stopped = true
+    const kept = keepCleanPrefix(full)
+    if (kept.length >= 200) {
+      full = kept
+      if (onReplace) onReplace(kept)
+    } else {
+      full = fallback
+      if (onReplace) onReplace(fallback)
+      else onToken?.(`\n\n_${fallback}_`)
+    }
+    await reader.cancel().catch(() => {})
   }
 
   while (true) {
+    if (stopped) break
     const { done, value } = await reader.read()
-    if (done) break
+    if (done) {
+      // Traite le buffer restant a la fin du stream.
+      if (buffer.trim()) processLine(buffer.trim())
+      break
+    }
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() // garde la ligne incomplete pour le prochain tour
     for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      let json
-      try {
-        json = JSON.parse(trimmed)
-      } catch {
-        continue
-      }
-      if (json.error) throw new Error(json.error)
-      const token = json.message?.content || ''
-      if (token) {
-        full += token
-        onToken?.(token)
-        if (looksDegenerate(full)) {
-          return stopWithMessage(DEGENERATE_MESSAGE)
-        }
-        if (looksRepetitive(full)) {
-          return stopWithMessage(REPETITION_MESSAGE)
-        }
-      }
+      if (stopped) break
+      processLine(line)
     }
   }
 
-  return full
+  return { content: full, metrics: buildMetrics(startedAt, model, temperature, serverMetrics) }
+
+  function processLine(line) {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    let json
+    try {
+      json = JSON.parse(trimmed)
+    } catch {
+      return
+    }
+    if (json.error) throw new Error(json.error)
+    if (json.done) serverMetrics = json
+    // /api/generate renvoie le token dans `response`, pas dans `message.content`.
+    const token = json.response || ''
+    if (token) {
+      full += token
+      onToken?.(token)
+      if (hasJunkMarkers(full)) {
+        stopWithMessage(DEGENERATE_MESSAGE)
+        return
+      }
+      if (isRepeating(full)) {
+        stopKeepingPrefix(REPETITION_MESSAGE)
+        return
+      }
+    }
+  }
+}
+
+function buildMetrics(startedAt, model, temperature, serverMetrics) {
+  const durationMs = Math.round(performance.now() - startedAt)
+  return {
+    durationMs,
+    model,
+    temperature,
+    tokensIn: serverMetrics?.prompt_eval_count ?? null,
+    tokensOut: serverMetrics?.eval_count ?? null,
+  }
 }
