@@ -2,7 +2,7 @@
 // Repond a /api/tags et /api/chat avec un stream NDJSON.
 import http from 'node:http'
 
-const PORT = 11434
+const PORT = Number(process.argv[2]) || 11434
 
 const replyTokens = [
   JSON.stringify({ message: { content: 'Voici ' } }),
