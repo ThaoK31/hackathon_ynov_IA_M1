@@ -87,7 +87,7 @@ export default function App() {
   // (qui doit se terminer par un message user) puis streame dedans.
   const runAssistant = useCallback(
     async (convId, context) => {
-      const asstMsg = { id: uid(), role: 'assistant', content: '' }
+      const asstMsg = { id: uid(), role: 'assistant', content: '', at: Date.now() }
       setConversations((prev) =>
         prev.map((c) => (c.id !== convId ? c : { ...c, messages: [...context, asstMsg] })),
       )
@@ -126,7 +126,7 @@ export default function App() {
       if (streaming || (!value && attachments.length === 0)) return
       let conv = active
       if (!conv) conv = newConversation()
-      const userMsg = { id: uid(), role: 'user', content: value, attachments }
+      const userMsg = { id: uid(), role: 'user', content: value, attachments, at: Date.now() }
       if (!conv.title) {
         const title = value
           ? titleFrom(value)
@@ -155,6 +155,33 @@ export default function App() {
       updateMessage(convId, msgId, (m) => ({ ...m, feedback: m.feedback === value ? null : value }))
     },
     [updateMessage],
+  )
+
+  // Reessayer depuis un message user : on regenere la reponse a ce message
+  // (on retire ce qui suit).
+  const regenerateFrom = useCallback(
+    async (userMsgId) => {
+      if (streaming || !active) return
+      const idx = active.messages.findIndex((m) => m.id === userMsgId)
+      if (idx < 0 || active.messages[idx].role !== 'user') return
+      await runAssistant(active.id, active.messages.slice(0, idx + 1))
+    },
+    [active, streaming, runAssistant],
+  )
+
+  // Editer un message user puis renvoyer : on remplace son contenu et on
+  // regenere a partir de la (les messages suivants sont abandonnes).
+  const editAndResend = useCallback(
+    async (userMsgId, newText) => {
+      if (streaming || !active) return
+      const value = newText.trim()
+      if (!value) return
+      const idx = active.messages.findIndex((m) => m.id === userMsgId)
+      if (idx < 0) return
+      const edited = { ...active.messages[idx], content: value, at: Date.now() }
+      await runAssistant(active.id, [...active.messages.slice(0, idx), edited])
+    },
+    [active, streaming, runAssistant],
   )
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
@@ -197,6 +224,8 @@ export default function App() {
             streaming={streaming}
             onRegenerate={regenerate}
             onFeedback={(msgId, value) => setFeedback(active.id, msgId, value)}
+            onRetry={regenerateFrom}
+            onEdit={editAndResend}
           />
         ) : (
           <EmptyState onPick={send} />

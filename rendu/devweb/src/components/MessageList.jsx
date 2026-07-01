@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import Message from './Message.jsx'
 import TypingIndicator from './TypingIndicator.jsx'
 
-export default function MessageList({ messages, streaming, onRegenerate, onFeedback }) {
+export default function MessageList({ messages, streaming, onRegenerate, onFeedback, onRetry, onEdit }) {
   const containerRef = useRef(null)
   const endRef = useRef(null)
   const stick = useRef(true) // faut-il suivre le bas automatiquement ?
@@ -48,6 +48,8 @@ export default function MessageList({ messages, streaming, onRegenerate, onFeedb
               canRetry={i === lastAssistant && !streaming}
               onRegenerate={onRegenerate}
               onFeedback={(value) => onFeedback(m.id, value)}
+              onRetry={onRetry}
+              onEdit={onEdit}
             />
           )
         })}

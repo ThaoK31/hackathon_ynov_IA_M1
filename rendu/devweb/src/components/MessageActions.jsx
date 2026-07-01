@@ -1,7 +1,8 @@
 import { useState } from 'react'
+import { formatTime } from '../lib/format.js'
 import { IconCopy, IconCheck, IconThumbUp, IconThumbDown, IconRetry, IconSpeaker, IconSpeakerOff } from './icons.jsx'
 
-export default function MessageActions({ content, feedback, isError, canRetry, onRegenerate, onFeedback }) {
+export default function MessageActions({ content, feedback, isError, at, canRetry, onRegenerate, onFeedback }) {
   const [copied, setCopied] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const ttsAvailable = typeof window !== 'undefined' && 'speechSynthesis' in window
@@ -50,6 +51,7 @@ export default function MessageActions({ content, feedback, isError, canRetry, o
 
   return (
     <div className={`msg-actions ${visible ? 'is-visible' : ''}`}>
+      {at && <span className="msg-time">{formatTime(at)}</span>}
       <button className="action-btn" onClick={copy} title={copied ? 'Copie !' : 'Copier'} aria-label="Copier">
         {copied ? <IconCheck /> : <IconCopy />}
       </button>
