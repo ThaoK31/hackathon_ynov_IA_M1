@@ -34,6 +34,18 @@ export const IconCheck = (props) => (
   </svg>
 )
 
+export const IconMinus = (props) => (
+  <svg width="14" height="14" {...base} {...props}>
+    <path d="M5 12h14" />
+  </svg>
+)
+
+export const IconPlus = (props) => (
+  <svg width="14" height="14" {...base} {...props}>
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+)
+
 export const IconArrowUp = (props) => (
   <svg width="17" height="17" {...base} {...props}>
     <path d="M12 19V5M6 11l6-6 6 6" />
