@@ -38,6 +38,12 @@ function tableCells(line) {
 
 function normalizeMarkdown(text) {
   return text
+    // Certains modeles crachent les sauts de ligne en clair (\n, \r, \t litteraux
+    // au lieu de vrais retours) : on les decode, sinon un tableau arrive colle
+    // sur une seule ligne et n'est plus reconnu.
+    .replace(/\\r\\n/g, '\n')
+    .replace(/\\[nr]/g, '\n')
+    .replace(/\\t/g, ' ')
     .replace(/\r\n?/g, '\n')
     .replace(/```([a-zA-Z0-9_-]*)/g, '\n```$1\n')
     .replace(/\n{3,}/g, '\n\n')
