@@ -93,7 +93,25 @@ function UserMessage({ id, content, attachments, at, onRetry, onEdit }) {
   )
 }
 
-function AssistantMessage({ content, isError, feedback, at, canRetry, onRegenerate, onFeedback }) {
+function formatDuration(ms) {
+  if (ms == null) return null
+  if (ms < 1000) return `${ms} ms`
+  return `${(ms / 1000).toFixed(1).replace('.', ',')} s`
+}
+
+function MetricsBadge({ metrics }) {
+  if (!metrics) return null
+  const parts = []
+  const duration = formatDuration(metrics.durationMs)
+  if (duration) parts.push(duration)
+  if (metrics.tokensOut != null) parts.push(`${metrics.tokensOut} tokens`)
+  else if (metrics.tokensIn != null) parts.push(`${metrics.tokensIn} tokens in`)
+  if (metrics.model) parts.push(metrics.model.split(':')[0])
+  if (parts.length === 0) return null
+  return <div className="msg-metrics" title={`Température : ${metrics.temperature ?? '-'}`}>{parts.join(' · ')}</div>
+}
+
+function AssistantMessage({ content, isError, feedback, at, metrics, canRetry, onRegenerate, onFeedback }) {
   const copyCode = async (e) => {
     const btn = e.target.closest?.('.code-copy')
     if (!btn) return
@@ -125,15 +143,18 @@ function AssistantMessage({ content, isError, feedback, at, canRetry, onRegenera
           dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
         />
         {content && (
-          <MessageActions
-            content={content}
-            feedback={feedback}
-            isError={isError}
-            at={at}
-            canRetry={canRetry}
-            onRegenerate={onRegenerate}
-            onFeedback={onFeedback}
-          />
+          <>
+            <MetricsBadge metrics={metrics} />
+            <MessageActions
+              content={content}
+              feedback={feedback}
+              isError={isError}
+              at={at}
+              canRetry={canRetry}
+              onRegenerate={onRegenerate}
+              onFeedback={onFeedback}
+            />
+          </>
         )}
       </div>
     </div>

@@ -468,6 +468,14 @@ textarea:focus-visible {
   max-width: 100%;
 }
 
+.msg-metrics {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+  margin-bottom: 2px;
+  user-select: none;
+}
+
 .msg-actions {
   display: flex;
   align-items: center;

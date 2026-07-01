@@ -78,7 +78,9 @@ export async function checkConnection() {
 }
 
 // Envoie la conversation et streame la reponse token par token (NDJSON /api/chat).
+// Renvoie { content, metrics } ou leve une erreur.
 export async function streamChat({ model, messages, systemPrompt, temperature, maxTokens, signal, onToken, onReplace }) {
+  const startedAt = performance.now()
   const payload = {
     model,
     messages: [{ role: 'system', content: withGuard(systemPrompt) }, ...messages],
@@ -112,43 +114,70 @@ export async function streamChat({ model, messages, systemPrompt, temperature, m
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  let serverMetrics = null
+  let stopped = false
   const stopWithMessage = async (message) => {
+    if (stopped) return
+    stopped = true
     full = message
     if (onReplace) onReplace(message)
     else onToken?.(`\n\n_${message}_`)
     await reader.cancel().catch(() => {})
-    return full
   }
 
   while (true) {
+    if (stopped) break
     const { done, value } = await reader.read()
-    if (done) break
+    if (done) {
+      // Traite le buffer restant a la fin du stream.
+      if (buffer.trim()) processLine(buffer.trim())
+      break
+    }
     buffer += decoder.decode(value, { stream: true })
     const lines = buffer.split('\n')
     buffer = lines.pop() // garde la ligne incomplete pour le prochain tour
     for (const line of lines) {
-      const trimmed = line.trim()
-      if (!trimmed) continue
-      let json
-      try {
-        json = JSON.parse(trimmed)
-      } catch {
-        continue
-      }
-      if (json.error) throw new Error(json.error)
-      const token = json.message?.content || ''
-      if (token) {
-        full += token
-        onToken?.(token)
-        if (looksDegenerate(full)) {
-          return stopWithMessage(DEGENERATE_MESSAGE)
-        }
-        if (looksRepetitive(full)) {
-          return stopWithMessage(REPETITION_MESSAGE)
-        }
-      }
+      if (stopped) break
+      processLine(line)
     }
   }
 
-  return full
+  return { content: full, metrics: buildMetrics(startedAt, model, temperature, serverMetrics) }
+
+  function processLine(line) {
+    const trimmed = line.trim()
+    if (!trimmed) return
+    let json
+    try {
+      json = JSON.parse(trimmed)
+    } catch {
+      return
+    }
+    if (json.error) throw new Error(json.error)
+    if (json.done) serverMetrics = json
+    const token = json.message?.content || ''
+    if (token) {
+      full += token
+      onToken?.(token)
+      if (looksDegenerate(full)) {
+        stopWithMessage(DEGENERATE_MESSAGE)
+        return
+      }
+      if (looksRepetitive(full)) {
+        stopWithMessage(REPETITION_MESSAGE)
+        return
+      }
+    }
+  }
+}
+
+function buildMetrics(startedAt, model, temperature, serverMetrics) {
+  const durationMs = Math.round(performance.now() - startedAt)
+  return {
+    durationMs,
+    model,
+    temperature,
+    tokensIn: serverMetrics?.prompt_eval_count ?? null,
+    tokensOut: serverMetrics?.eval_count ?? null,
+  }
 }
