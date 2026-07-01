@@ -9,9 +9,15 @@ const KEYS = {
 }
 
 export const DEFAULT_SETTINGS = {
+  // URL du serveur d'inference. Vide = cible du .env (OLLAMA_URL) ou Ollama local.
+  // Renseignee ici, elle est reglable a chaud (sans redemarrer Vite) et le proxy
+  // retombe automatiquement sur le Ollama local si elle ne repond pas.
+  endpoint: '',
   model: 'phi35-financial:latest',
-  temperature: 0.3,
-  maxTokens: 2048,
+  // Temperature basse + longueur mesuree : le modele (3.8B) donne une reponse
+  // propre puis s'arrete, au lieu de radoter et de degenerer sur une longue plage.
+  temperature: 0.2,
+  maxTokens: 800,
   systemPrompt:
     "Tu es l'assistant financier de TechCorp Industries. Reponds en francais, de facon claire et concise. Donne UNE seule reponse, sans la repeter ni proposer plusieurs variantes. Mets en gras les termes cles. Si la question sort du domaine finance / business, recadre poliment en une phrase.",
 }
