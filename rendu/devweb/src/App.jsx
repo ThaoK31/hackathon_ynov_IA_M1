@@ -86,17 +86,25 @@ export default function App() {
     )
   }, [])
 
-  // Raccourci clavier : Ctrl/Cmd + K -> palette de commandes.
+  // Raccourcis clavier globaux.
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
-        setPaletteOpen((open) => !open)
+      if (e.ctrlKey || e.metaKey) {
+        const key = e.key.toLowerCase()
+        if (key === 'k' && e.shiftKey) {
+          e.preventDefault()
+          openNewConversation()
+          return
+        }
+        if (key === 'k') {
+          e.preventDefault()
+          setPaletteOpen((open) => !open)
+        }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [openNewConversation])
 
   // Coeur de la generation : ajoute une reponse assistant vide au contexte fourni
   // (qui doit se terminer par un message user) puis streame dedans.

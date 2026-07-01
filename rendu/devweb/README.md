@@ -1,78 +1,135 @@
-# TechCorp AI — Interface de chat (DEV WEB)
+# TechCorp AI - Interface de chat DEV WEB
 
-Interface web pour discuter avec l'assistant financier **Phi-3.5-Financial** de TechCorp,
-servi par le serveur d'inférence **Ollama** de la filière INFRA.
+Interface web React/Vite pour interagir avec l'assistant financier de TechCorp via un serveur
+d'inference Ollama. Le navigateur reste en same-origin : il appelle `/api/*`, puis le proxy Vite
+ou nginx relaie vers Ollama.
 
-Streaming des réponses en temps réel, multi-conversations, réglages du modèle, thème
-clair / sombre. Interface React + Vite.
+## Apercu
 
-## Lancement (une commande)
+### Vue web
 
-Prérequis : **Node.js 18+**.
+![Vue web de l'interface TechCorp AI](docs/screenshots/vue-web.png)
+
+### Vue mobile
+
+![Vue mobile de l'interface TechCorp AI](docs/screenshots/vue-mobile.png)
+
+## Prerequis
+
+- Node.js 18+
+- Ollama accessible sur `http://localhost:11434` (ou une machine INFRA)
+- Le modele attendu est `phi35-financial:latest`
+
+## Lancement local
 
 ```powershell
-# Windows / PowerShell
 ./start.ps1
 ```
 
 ```bash
-# Linux / macOS
 ./run.sh
 ```
 
-→ l'interface s'ouvre sur **http://localhost:5173**.
+L'interface est disponible sur [http://localhost:5173](http://localhost:5173).
 
-Pour cibler le serveur d'inférence d'une autre machine (celle de l'INFRA) :
+Pour cibler une autre machine d'inference :
 
 ```powershell
-$env:OLLAMA_URL = "http://<IP-INFRA>:11434" ; ./start.ps1
+$env:OLLAMA_URL = "http://<IP-INFRA>:11434"; ./start.ps1
 ```
 
-## Déploiement (Docker, une commande)
+```bash
+OLLAMA_URL=http://<IP-INFRA>:11434 ./run.sh
+```
 
-Pour un déploiement type production (nginx sert le build et proxifie `/api`) :
+## Lancement Docker
+
+```bash
+docker compose up -d --build
+```
+
+L'interface est disponible sur [http://localhost:8080](http://localhost:8080).
+
+Par defaut, le conteneur cible `host.docker.internal:11434`. Pour une machine INFRA :
 
 ```bash
 OLLAMA_URL=http://<IP-INFRA>:11434 docker compose up -d --build
 ```
 
-→ interface sur **http://localhost:8080**. Sans variable, le proxy cible `host.docker.internal:11434`
-(l'Ollama de la machine hôte).
+## Architecture same-origin
 
-## Raccourcis clavier
+Le front ne contacte jamais Ollama directement. Tous les appels passent par `/api/*` :
 
-- **Entrée** : envoyer · **Maj+Entrée** : nouvelle ligne
-- **↑** (champ vide) : rappeler le dernier message envoyé
-- **Ctrl / Cmd + K** : nouvelle conversation
+- En dev : Vite proxy `/api` vers `OLLAMA_URL`.
+- En prod/Docker : nginx proxy `/api` vers `OLLAMA_URL` avec `proxy_buffering off` pour garder
+  le streaming token par token.
 
-## Connexion au serveur d'inférence
+Avantage : pas de CORS cote navigateur, et l'URL reelle du serveur d'inference reste cote serveur.
 
-Le navigateur **n'appelle jamais Ollama directement**. Il fait des requêtes same-origin
-`/api/*` que Vite relaie vers `OLLAMA_URL` (proxy configuré dans `vite.config.js`).
-Résultat : aucun problème de CORS, et l'adresse du serveur reste côté serveur.
+## Fonctionnalites
 
-L'URL par défaut est `http://localhost:11434` ; elle se règle via `.env` (voir `.env.example`).
+- Chat avec streaming token par token et bouton Stop.
+- Badge de connexion avec latence et liste automatique des modeles disponibles.
+- Fallback automatique si le modele selectionne n'existe pas sur le serveur.
+- Historique multi-conversations persistant dans le navigateur.
+- Recherche, suppression, edition et regeneration des messages.
+- Reglages : modele, temperature, longueur max et prompt systeme.
+- Rendu Markdown securise : gras, italique, listes, tableaux et blocs de code.
+  Les tableaux larges passent en mode scrollable pour rester lisibles.
+- Pieces jointes texte injectees dans le contexte.
+- Recadrage local des demandes de code : l'assistant reste dans le domaine finance/business.
+- Detection et interruption des reponses qui degenerent ou bouclent.
+- Metriques d'inference affichees sous chaque reponse : duree, tokens, modele.
+- Palette de commandes (`Ctrl / Cmd + K`) : nouvelle conversation, reglages, theme, copie, export.
+- Export de la conversation au format Markdown.
+- Theme sombre/clair et interface responsive.
+- Deploiement Docker via nginx avec proxy `/api`.
 
-## Fonctionnalités
+## Securite et robustesse
 
-- **Streaming** token par token (endpoint Ollama `/api/chat`), avec bouton **Stop**.
-- **État de connexion** au serveur (connecté / déconnecté) avec latence, rafraîchi en continu.
-- **Multi-conversations** : création, sélection, suppression, titres automatiques, historique
-  persistant dans le navigateur (localStorage).
-- **Réglages** : modèle (liste auto des modèles disponibles), température, longueur max,
-  prompt système.
-- **Rendu Markdown** des réponses (gras, listes, code), échappé pour éviter toute injection.
-- **Thème** clair / sombre, interface responsive.
+- Le HTML brut du modele est systematiquement echappe avant rendu : pas d'injection via
+  `innerHTML`.
+- Le prompt systeme impose une reponse unique, en francais, sans repetition.
+- Une garde cote client interrompt la generation si la reponse devient incoherente ou repetitive.
+- Les demandes de code sont recadrees localement sans appeler le serveur.
+
+## Tests rapides
+
+```bash
+npm test
+npm run build
+```
+
+Verification Docker :
+
+```bash
+docker compose up -d --build
+```
+
+Puis ouvrir [http://localhost:8080](http://localhost:8080).
+
+## Raccourcis
+
+- `Entree` : envoyer
+- `Maj + Entree` : nouvelle ligne
+- `Fleche haut` dans un champ vide : reprendre le dernier message
+- `Ctrl / Cmd + K` : ouvrir la palette de commandes
+- `Ctrl / Cmd + Shift + K` : nouvelle conversation (aussi dans la palette)
 
 ## Structure
 
-```
+```text
 rendu/devweb/
+├─ docs/screenshots/       captures du rendu
+├─ scripts/                controles rapides du rendu
 ├─ src/
-│  ├─ App.jsx              état global + logique d'envoi / streaming
-│  ├─ components/          Sidebar, Composer, Message, TypingIndicator, SettingsPanel…
-│  └─ lib/                 ollama.js (client), markdown.js (rendu sûr), storage.js
-├─ vite.config.js          proxy /api → Ollama
-├─ start.ps1 / run.sh      lancement en une commande
-└─ .env.example            configuration de l'URL d'inférence
+│  ├─ components/          Sidebar, Composer, Message, SettingsPanel...
+│  ├─ lib/                 client Ollama, rendu Markdown, stockage local
+│  └─ App.jsx              etat global et orchestration du chat
+├─ Dockerfile
+├─ docker-compose.yml
+├─ nginx.conf.template
+├─ start.ps1
+├─ run.sh
+└─ vite.config.js
 ```
