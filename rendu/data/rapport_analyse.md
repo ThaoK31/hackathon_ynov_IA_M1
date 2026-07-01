@@ -1,5 +1,7 @@
 # 📊 Rapport d'Analyse et de Nettoyage des Datasets
-**Responsable : EL ARJOUNI Mohamed Amine**
+
+**Responsable :** EL ARJOUNI Mohamed Amine (Data & IA)  
+**Date :** 1er Juillet 2026  
 
 ## 1. Description Générale des Datasets Hérités
 
