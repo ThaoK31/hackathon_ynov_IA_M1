@@ -6,6 +6,7 @@ import MessageList from './components/MessageList.jsx'
 import Composer from './components/Composer.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
+import EndpointToggle from './components/EndpointToggle.jsx'
 import { checkConnection, getLocalGuardReply, setEndpoint, streamChat } from './lib/ollama.js'
 import * as store from './lib/storage.js'
 import { expandUserContent } from './lib/attachments.js'
@@ -16,6 +17,7 @@ const uid = () =>
 
 const titleFrom = (text) => text.replace(/\s+/g, ' ').trim().slice(0, 42) || 'Nouvelle conversation'
 const startsOnNewChat = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('new')
+const LOCAL_ENDPOINT = 'http://localhost:11434'
 
 export default function App() {
   const [conversations, setConversations] = useState(store.loadConversations)
@@ -73,6 +75,19 @@ export default function App() {
     setConversations((prev) => prev.filter((c) => c.messages?.length > 0))
     setActiveId(null)
   }, [])
+
+  const setEndpointMode = useCallback(
+    (mode) => {
+      if (abortRef.current) {
+        abortRef.current.abort()
+        abortRef.current = null
+        setStreaming(false)
+      }
+      setConnection((prev) => ({ ...prev, checking: true }))
+      setSettings((prev) => ({ ...prev, endpoint: mode === 'local' ? LOCAL_ENDPOINT : '' }))
+    },
+    [],
+  )
 
   const deleteConversation = useCallback((id) => {
     setConversations((prev) => prev.filter((c) => c.id !== id))
@@ -272,6 +287,11 @@ export default function App() {
             </button>
           )}
           <div className="topbar-title">{active?.title || 'TechCorp AI'}</div>
+          <EndpointToggle
+            mode={settings.endpoint === LOCAL_ENDPOINT ? 'local' : 'infra'}
+            disabled={streaming}
+            onChange={setEndpointMode}
+          />
           <StatusBadge connection={connection} />
         </header>
 

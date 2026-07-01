@@ -16,7 +16,9 @@ export default function Composer({ streaming, models, model, lastUserMessage, on
     const ta = taRef.current
     if (!ta) return
     ta.style.height = 'auto'
-    ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
+    const height = Math.min(ta.scrollHeight, 200)
+    ta.style.height = `${height}px`
+    ta.style.overflowY = ta.scrollHeight > 200 ? 'auto' : 'hidden'
   }, [text])
 
   const addFiles = async (files) => {

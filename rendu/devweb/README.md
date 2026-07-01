@@ -17,10 +17,10 @@ ou nginx relaie vers Ollama.
 ## Prerequis
 
 - Node.js 18+
-- Ollama accessible sur `http://localhost:11434` (ou une machine INFRA)
-- Le modele attendu est `phi35-financial:latest`
+- Un serveur Ollama accessible en local ou via le tunnel INFRA
+- Le modele est detecte automatiquement via `/api/tags`
 
-## Lancement local
+## Lancement recommande
 
 ```powershell
 ./start.ps1
@@ -32,7 +32,20 @@ ou nginx relaie vers Ollama.
 
 L'interface est disponible sur [http://localhost:5173](http://localhost:5173).
 
-Pour cibler une autre machine d'inference :
+Le script lit `OLLAMA_URL` dans cet ordre :
+
+1. Variable d'environnement deja definie.
+2. Fichier `.env`.
+3. Fallback `http://localhost:11434`.
+
+Le tunnel INFRA change regulierement : ne pas le versionner. Le partager via le canal d'equipe,
+puis creer un `.env` local :
+
+```env
+OLLAMA_URL=https://<tunnel-infra>
+```
+
+Pour cibler temporairement une autre machine :
 
 ```powershell
 $env:OLLAMA_URL = "http://<IP-INFRA>:11434"; ./start.ps1
@@ -41,6 +54,17 @@ $env:OLLAMA_URL = "http://<IP-INFRA>:11434"; ./start.ps1
 ```bash
 OLLAMA_URL=http://<IP-INFRA>:11434 ./run.sh
 ```
+
+## Bascule INFRA / local
+
+Un toggle est disponible dans la barre du haut :
+
+- **INFRA** : utilise le serveur configure cote script (`OLLAMA_URL` dans `.env` ou variable
+  d'environnement).
+- **Local** : force `http://localhost:11434`.
+
+Pour la demo, ce toggle permet de repasser rapidement sur Ollama local si le tunnel INFRA est trop
+lent ou instable, sans redemarrer l'interface.
 
 ## Lancement Docker
 
@@ -115,6 +139,16 @@ Puis ouvrir [http://localhost:8080](http://localhost:8080).
 - `Fleche haut` dans un champ vide : reprendre le dernier message
 - `Ctrl / Cmd + K` : ouvrir la palette de commandes
 - `Ctrl / Cmd + Shift + K` : nouvelle conversation (aussi dans la palette)
+
+## Equipe
+
+Groupe 6 :
+
+- Julien Sabathe - Cyber
+- Raouni Said - Infra
+- Onrwa Madi - Dev
+- Mohamed Amine El Arjouni - Data
+- Lucas Remery - Dev
 
 ## Structure
 

@@ -28,18 +28,34 @@ function ollamaProxy(envTarget) {
           body = Buffer.concat(chunks)
         }
 
-        const call = (base) =>
-          fetch(`${base}/api${path}`, {
+        // Timeout sur l'ARRIVEE des entetes seulement : si la cible ne repond
+        // pas a temps (tunnel eteint qui hang), on annule et on bascule local.
+        // Une fois les entetes recus, on laisse le flux couler (streaming lent).
+        const call = (base, timeoutMs) => {
+          const controller = new AbortController()
+          const timer = setTimeout(() => controller.abort(), timeoutMs)
+          return fetch(`${base}/api${path}`, {
             method: req.method,
             headers: { 'content-type': req.headers['content-type'] || 'application/json' },
             body,
-          })
+            signal: controller.signal,
+          }).then(
+            (r) => {
+              clearTimeout(timer)
+              return r
+            },
+            (e) => {
+              clearTimeout(timer)
+              throw e
+            },
+          )
+        }
 
-        // Cible principale, puis fallback local si elle echoue.
+        // Cible principale (timeout court), puis fallback local si elle echoue.
         let upstream
-        let source = 'infra'
+        let source = primary === LOCAL ? 'local' : 'infra'
         try {
-          upstream = await call(primary)
+          upstream = await call(primary, 15000)
           if (!upstream.ok && primary !== LOCAL) throw new Error(`HTTP ${upstream.status}`)
         } catch {
           if (primary === LOCAL) {
@@ -48,7 +64,7 @@ function ollamaProxy(envTarget) {
             return
           }
           try {
-            upstream = await call(LOCAL)
+            upstream = await call(LOCAL, 15000)
             source = 'local'
           } catch {
             res.statusCode = 502
