@@ -17,7 +17,7 @@ export default function CommandPalette({
 
   const actions = useMemo(() => {
     const list = [
-      { id: 'new', label: 'Nouvelle conversation', shortcut: 'Ctrl K', action: onNewConversation },
+      { id: 'new', label: 'Nouvelle conversation', shortcut: 'Ctrl Shift K', action: onNewConversation },
       { id: 'settings', label: 'Ouvrir les reglages', shortcut: 'Ctrl ,', action: onOpenSettings },
       {
         id: 'theme',
