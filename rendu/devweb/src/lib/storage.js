@@ -11,7 +11,7 @@ const KEYS = {
 export const DEFAULT_SETTINGS = {
   model: 'phi3.5-financial',
   temperature: 0.3,
-  maxTokens: 800,
+  maxTokens: 2048,
   systemPrompt:
     "Tu es l'assistant financier de TechCorp Industries. Reponds en francais, de facon claire et concise. Donne UNE seule reponse, sans la repeter ni proposer plusieurs variantes. Mets en gras les termes cles. Si la question sort du domaine finance / business, recadre poliment en une phrase.",
 }
