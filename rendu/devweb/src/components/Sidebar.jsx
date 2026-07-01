@@ -26,10 +26,20 @@ export default function Sidebar({
   return (
     <aside className={`sidebar ${open ? '' : 'sidebar-collapsed'}`}>
       <div className="sidebar-top">
-        <div className="brand">
+        <a
+          className="brand"
+          href="?new=1"
+          onClick={(e) => {
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+            e.preventDefault()
+            onNew()
+          }}
+          title="Nouvelle conversation"
+          aria-label="Nouvelle conversation"
+        >
           <span className="brand-mark" aria-hidden="true">◆</span>
           <span className="brand-name">TechCorp <span className="brand-accent">AI</span></span>
-        </div>
+        </a>
         <button className="icon-btn" onClick={onToggle} title="Reduire le menu" aria-label="Reduire le menu">
           ⟨
         </button>

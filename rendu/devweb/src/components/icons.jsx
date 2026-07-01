@@ -52,6 +52,12 @@ export const IconArrowUp = (props) => (
   </svg>
 )
 
+export const IconArrowDown = (props) => (
+  <svg width="17" height="17" {...base} {...props}>
+    <path d="M12 5v14M6 13l6 6 6-6" />
+  </svg>
+)
+
 export const IconStop = (props) => (
   <svg width="15" height="15" {...base} fill="currentColor" stroke="none" {...props}>
     <rect x="7" y="7" width="10" height="10" rx="2" />
