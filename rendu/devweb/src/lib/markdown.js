@@ -11,10 +11,17 @@ function escapeHtml(s) {
 }
 
 function inline(s) {
-  return s
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+  return (
+    s
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+      // Gras ouvert mais jamais ferme (frequent avec les petits modeles) :
+      // on met en gras jusqu'a la fin plutot que de laisser les ** en clair.
+      .replace(/\*\*([^*]+)$/, '<strong>$1</strong>')
+      // Marqueurs orphelins restants : on les retire.
+      .replace(/\*\*/g, '')
+  )
 }
 
 // Une ligne de separation de tableau : |---|:--:|---| (contient au moins un tiret).
