@@ -9,12 +9,19 @@ const KEYS = {
 }
 
 export const DEFAULT_SETTINGS = {
-  model: 'phi3.5-financial',
+  model: 'phi35-financial:latest',
   temperature: 0.3,
   maxTokens: 2048,
   systemPrompt:
     "Tu es l'assistant financier de TechCorp Industries. Reponds en francais, de facon claire et concise. Donne UNE seule reponse, sans la repeter ni proposer plusieurs variantes. Mets en gras les termes cles. Si la question sort du domaine finance / business, recadre poliment en une phrase.",
 }
+
+export function pickAvailableModel(current, models = []) {
+  if (!models.length || models.includes(current)) return current
+  return models.find((m) => m === DEFAULT_SETTINGS.model) || models.find((m) => m.includes('financial')) || models[0]
+}
+
+const hasMessages = (conversation) => Array.isArray(conversation.messages) && conversation.messages.length > 0
 
 function read(key, fallback) {
   try {
@@ -33,11 +40,14 @@ function write(key, value) {
   }
 }
 
-export const loadConversations = () => read(KEYS.conversations, [])
+export const loadConversations = () => read(KEYS.conversations, []).filter(hasMessages)
 export const saveConversations = (v) => write(KEYS.conversations, v)
 export const loadActiveId = () => read(KEYS.activeId, null)
 export const saveActiveId = (v) => write(KEYS.activeId, v)
-export const loadSettings = () => ({ ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) })
+export const loadSettings = () => {
+  const settings = { ...DEFAULT_SETTINGS, ...read(KEYS.settings, {}) }
+  return { ...settings, model: settings.model === 'phi3.5-financial' ? DEFAULT_SETTINGS.model : settings.model }
+}
 export const saveSettings = (v) => write(KEYS.settings, v)
 export const loadTheme = () => read(KEYS.theme, 'dark')
 export const saveTheme = (v) => write(KEYS.theme, v)

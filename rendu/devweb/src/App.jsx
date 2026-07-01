@@ -5,7 +5,7 @@ import EmptyState from './components/EmptyState.jsx'
 import MessageList from './components/MessageList.jsx'
 import Composer from './components/Composer.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
-import { checkConnection, streamChat } from './lib/ollama.js'
+import { checkConnection, getLocalGuardReply, streamChat } from './lib/ollama.js'
 import * as store from './lib/storage.js'
 import { expandUserContent } from './lib/attachments.js'
 
@@ -13,16 +13,17 @@ const uid = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 
 const titleFrom = (text) => text.replace(/\s+/g, ' ').trim().slice(0, 42) || 'Nouvelle conversation'
+const startsOnNewChat = () => typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('new')
 
 export default function App() {
   const [conversations, setConversations] = useState(store.loadConversations)
-  const [activeId, setActiveId] = useState(store.loadActiveId)
+  const [activeId, setActiveId] = useState(() => (startsOnNewChat() ? null : store.loadActiveId()))
   const [settings, setSettings] = useState(store.loadSettings)
   const [theme, setTheme] = useState(store.loadTheme)
   const [connection, setConnection] = useState({ checking: true, ok: false, models: [], latencyMs: null, error: null })
   const [streaming, setStreaming] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth > 760)
   const abortRef = useRef(null)
 
   // Persistance
@@ -33,6 +34,14 @@ export default function App() {
     store.saveTheme(theme)
     document.documentElement.dataset.theme = theme
   }, [theme])
+
+  useEffect(() => {
+    if (!connection.ok || connection.models.length === 0) return
+    setSettings((prev) => {
+      const model = store.pickAvailableModel(prev.model, connection.models)
+      return model === prev.model ? prev : { ...prev, model }
+    })
+  }, [connection.ok, connection.models])
 
   // Health-check du serveur d'inference (au demarrage puis toutes les 15 s)
   useEffect(() => {
@@ -51,11 +60,14 @@ export default function App() {
 
   const active = conversations.find((c) => c.id === activeId) || null
 
-  const newConversation = useCallback(() => {
-    const conv = { id: uid(), title: '', messages: [], createdAt: Date.now() }
-    setConversations((prev) => [conv, ...prev])
-    setActiveId(conv.id)
-    return conv
+  const openNewConversation = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort()
+      abortRef.current = null
+      setStreaming(false)
+    }
+    setConversations((prev) => prev.filter((c) => c.messages?.length > 0))
+    setActiveId(null)
   }, [])
 
   const deleteConversation = useCallback((id) => {
@@ -76,17 +88,26 @@ export default function App() {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        newConversation()
+        openNewConversation()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [newConversation])
+  }, [openNewConversation])
 
   // Coeur de la generation : ajoute une reponse assistant vide au contexte fourni
   // (qui doit se terminer par un message user) puis streame dedans.
   const runAssistant = useCallback(
     async (convId, context) => {
+      const localReply = getLocalGuardReply(context, settings.systemPrompt)
+      if (localReply) {
+        const asstMsg = { id: uid(), role: 'assistant', content: localReply, at: Date.now() }
+        setConversations((prev) =>
+          prev.map((c) => (c.id !== convId ? c : { ...c, messages: [...context, asstMsg] })),
+        )
+        return
+      }
+
       const asstMsg = { id: uid(), role: 'assistant', content: '', at: Date.now() }
       setConversations((prev) =>
         prev.map((c) => (c.id !== convId ? c : { ...c, messages: [...context, asstMsg] })),
@@ -105,6 +126,7 @@ export default function App() {
           maxTokens: settings.maxTokens,
           signal: controller.signal,
           onToken: (tok) => updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: m.content + tok })),
+          onReplace: (text) => updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: text })),
         })
       } catch (err) {
         if (err.name === 'AbortError') {
@@ -113,8 +135,10 @@ export default function App() {
           updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: err.message, isError: true }))
         }
       } finally {
-        setStreaming(false)
-        abortRef.current = null
+        if (abortRef.current === controller) {
+          setStreaming(false)
+          abortRef.current = null
+        }
       }
     },
     [settings, updateMessage],
@@ -125,19 +149,23 @@ export default function App() {
       const value = (text || '').trim()
       if (streaming || (!value && attachments.length === 0)) return
       let conv = active
-      if (!conv) conv = newConversation()
       const userMsg = { id: uid(), role: 'user', content: value, attachments, at: Date.now() }
-      if (!conv.title) {
-        const title = value
-          ? titleFrom(value)
-          : attachments[0]
-            ? `Document : ${attachments[0].name}`
-            : 'Nouvelle conversation'
+      const title = value
+        ? titleFrom(value)
+        : attachments[0]
+          ? `Document : ${attachments[0].name}`
+          : 'Nouvelle conversation'
+
+      if (!conv) {
+        conv = { id: uid(), title, messages: [], createdAt: Date.now() }
+        setConversations((prev) => [conv, ...prev.filter((c) => c.messages?.length > 0)])
+        setActiveId(conv.id)
+      } else if (!conv.title) {
         setConversations((prev) => prev.map((c) => (c.id !== conv.id ? c : { ...c, title })))
       }
       await runAssistant(conv.id, [...conv.messages, userMsg])
     },
-    [active, streaming, newConversation, runAssistant],
+    [active, streaming, runAssistant],
   )
 
   // Regenere la derniere reponse de l'assistant.
@@ -199,7 +227,7 @@ export default function App() {
         open={sidebarOpen}
         theme={theme}
         onSelect={setActiveId}
-        onNew={newConversation}
+        onNew={openNewConversation}
         onDelete={deleteConversation}
         onToggle={() => setSidebarOpen((v) => !v)}
         onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}

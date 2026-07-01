@@ -2,6 +2,66 @@
 // que le proxy (Vite en dev, nginx en prod) relaie vers le serveur d'inference.
 
 const API = '/api'
+const RESPONSE_GUARD =
+  'Consignes de sortie: reponds en francais, une seule fois, sans fragments anglais inutiles. Si la demande est hors finance/business, recadre poliment en une phrase. Ne fournis pas de code de programmation; si une demande de code arrive, propose plutot une explication metier ou une formule financiere. Pour un tableau, reste compact: 3 a 5 colonnes, libelles courts, cellules courtes. Ne recommence jamais le meme bloc ni la meme phrase.'
+const DEGENERATE_MESSAGE =
+  "La reponse du modele a ete interrompue car elle contenait des fragments incoherents. Reformule la demande sur un cas finance/business, ou change de modele dans les Reglages."
+const REPETITION_MESSAGE =
+  'La reponse du modele a ete interrompue car elle repetait les memes fragments. Essaie une question plus courte ou baisse la longueur max dans les Reglages.'
+
+const codeRequestPattern =
+  /\b(code|snippet|script|python|javascript|typescript|boucle|fonction|for|while|framework|markdown)\b/i
+const defaultFinancePromptPattern = /assistant financier|finance\s*\/\s*business|TechCorp Industries/i
+const badOutputMarkerPattern =
+  /\b(markdwonkbeat|heree|icie|élés fruit|eles fruit|clon|Euxin|forever onward|request code example)\b/gi
+
+function withGuard(systemPrompt) {
+  return systemPrompt ? `${systemPrompt}\n\n${RESPONSE_GUARD}` : RESPONSE_GUARD
+}
+
+function countMatches(text, pattern) {
+  pattern.lastIndex = 0
+  return Array.from(text.matchAll(pattern)).length
+}
+
+function hasRepeatedPhrase(text) {
+  const words = text.toLowerCase().match(/[a-z0-9_'-]{3,}/g) || []
+  if (words.length < 45) return false
+  const seen = new Set()
+  for (let i = 0; i <= words.length - 10; i += 1) {
+    const phrase = words.slice(i, i + 10).join(' ')
+    if (seen.has(phrase)) return true
+    seen.add(phrase)
+  }
+  return false
+}
+
+function looksRepetitive(text) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length < 650) return false
+  for (const size of [180, 260, 360]) {
+    const tail = normalized.slice(-size)
+    const previous = normalized.slice(-size * 3, -size)
+    if (tail.length === size && previous.split(tail).length > 2) return true
+  }
+  const lastSentence = normalized.split(/[.!?]\s+/).filter(Boolean).at(-1)
+  if (!lastSentence || lastSentence.length < 80) return false
+  return normalized.slice(0, -lastSentence.length).includes(lastSentence)
+}
+
+function looksDegenerate(text) {
+  const normalized = text.replace(/\s+/g, ' ').trim()
+  if (normalized.length < 180) return false
+  if (countMatches(normalized, badOutputMarkerPattern) >= 2) return true
+  return normalized.length > 450 && hasRepeatedPhrase(normalized)
+}
+
+export function getLocalGuardReply(messages, systemPrompt) {
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user')?.content || ''
+  if (!defaultFinancePromptPattern.test(systemPrompt || '')) return null
+  if (!codeRequestPattern.test(lastUser)) return null
+  return "Je suis configure comme assistant financier de TechCorp, pas comme assistant de programmation. Je peux t'expliquer une formule, un indicateur ou un calcul metier, mais pas produire du code."
+}
 
 // Verifie que le serveur repond et recupere la liste des modeles + la latence.
 export async function checkConnection() {
@@ -18,10 +78,10 @@ export async function checkConnection() {
 }
 
 // Envoie la conversation et streame la reponse token par token (NDJSON /api/chat).
-export async function streamChat({ model, messages, systemPrompt, temperature, maxTokens, signal, onToken }) {
+export async function streamChat({ model, messages, systemPrompt, temperature, maxTokens, signal, onToken, onReplace }) {
   const payload = {
     model,
-    messages: systemPrompt ? [{ role: 'system', content: systemPrompt }, ...messages] : messages,
+    messages: [{ role: 'system', content: withGuard(systemPrompt) }, ...messages],
     stream: true,
     options: {
       temperature,
@@ -52,6 +112,13 @@ export async function streamChat({ model, messages, systemPrompt, temperature, m
   const decoder = new TextDecoder()
   let buffer = ''
   let full = ''
+  const stopWithMessage = async (message) => {
+    full = message
+    if (onReplace) onReplace(message)
+    else onToken?.(`\n\n_${message}_`)
+    await reader.cancel().catch(() => {})
+    return full
+  }
 
   while (true) {
     const { done, value } = await reader.read()
@@ -73,6 +140,12 @@ export async function streamChat({ model, messages, systemPrompt, temperature, m
       if (token) {
         full += token
         onToken?.(token)
+        if (looksDegenerate(full)) {
+          return stopWithMessage(DEGENERATE_MESSAGE)
+        }
+        if (looksRepetitive(full)) {
+          return stopWithMessage(REPETITION_MESSAGE)
+        }
       }
     }
   }

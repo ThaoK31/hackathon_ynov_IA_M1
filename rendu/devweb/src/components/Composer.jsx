@@ -133,7 +133,7 @@ export default function Composer({ streaming, models, model, lastUserMessage, on
           )}
         </div>
       </div>
-      <p className="composer-note">Reponses generees par IA — verifiez les chiffres importants avant d'agir.</p>
+      <p className="composer-note">Verifiez les chiffres importants avant d'agir.</p>
     </div>
   )
 }
