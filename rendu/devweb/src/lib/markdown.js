@@ -164,32 +164,70 @@ export function renderMarkdown(text) {
       continue
     }
 
-    // Tableau : ligne d'entete suivie d'une ligne de separation.
-    if (isTableRow(line) && i + 1 < lines.length && isTableSep(lines[i + 1])) {
+    // Separation de tableau cassee : contient des pipes et des tirets mais
+    // aussi du bruit (ex: "|------|------Singulares------||-------").
+    const isBrokenTableSep = (l) => {
+      const t = l.trim()
+      const pipeCount = (t.match(/\|/g) || []).length
+      const dashCount = (t.match(/-/g) || []).length
+      return pipeCount >= 2 && dashCount >= 3
+    }
+
+    const canStartTable = (ls, idx) => {
+      if (!isTableRow(ls[idx])) return false
+      const header = tableCells(ls[idx])
+      if (header.length < 2) return false
+      const next = ls[idx + 1] ?? ''
+      const nextCells = tableCells(next)
+      return (
+        isTableSep(next) ||
+        isBrokenTableSep(next) ||
+        (isTableRow(next) && nextCells.length === header.length)
+      )
+    }
+
+    const normalizeRow = (cells, size) => {
+      const row = cells.slice(0, size)
+      while (row.length < size) row.push('')
+      return row
+    }
+
+    // Tableau : entete + separation (propre ou cassee) ou ligne suivante avec
+    // le meme nombre de colonnes.
+    if (canStartTable(lines, i)) {
       flushPara()
       closeList()
       const header = tableCells(line)
+      const colCount = header.length
       const rows = []
-      i += 2
-      while (i < lines.length && lines[i].trim() !== '' && isTableRow(lines[i]) && !isTableSep(lines[i])) {
-        rows.push(tableCells(lines[i]))
+      i += 1
+      while (i < lines.length) {
+        const current = lines[i]
+        if (current.trim() === '') break
+        if (isTableSep(current) || isBrokenTableSep(current)) {
+          i += 1
+          continue
+        }
+        if (!isTableRow(current)) break
+        const cells = tableCells(current)
+        if (cells.length < 2) break
+        rows.push(normalizeRow(cells, colCount))
         i += 1
       }
-      while (i < lines.length && isTableSep(lines[i])) i += 1
       const tableClass = header.length > 5 ? 'md-table md-table-wide' : 'md-table'
       out.push(`<div class="${tableClass}"><table><thead><tr>`)
       header.forEach((h) => out.push(`<th>${inline(h)}</th>`))
       out.push('</tr></thead><tbody>')
       rows.forEach((r) => {
         out.push('<tr>')
-        for (let c = 0; c < header.length; c += 1) out.push(`<td>${inline(r[c] ?? '')}</td>`)
+        for (let c = 0; c < colCount; c += 1) out.push(`<td>${inline(r[c] ?? '')}</td>`)
         out.push('</tr>')
       })
       out.push('</tbody></table></div>')
       continue
     }
 
-    if (isTableSep(line)) {
+    if (isTableSep(line) || isBrokenTableSep(line)) {
       flushPara()
       closeList()
       i += 1

@@ -3,7 +3,7 @@
 
 const API = '/api'
 const RESPONSE_GUARD =
-  'Consignes de sortie: reponds en francais, une seule fois, sans fragments anglais inutiles. Si la demande est hors finance/business, recadre poliment en une phrase. Ne fournis pas de code de programmation; si une demande de code arrive, propose plutot une explication metier ou une formule financiere. Pour un tableau, reste compact: 3 a 5 colonnes, libelles courts, cellules courtes. Ne recommence jamais le meme bloc ni la meme phrase.'
+  'Consignes de sortie: reponds en francais, une seule fois, sans fragments anglais inutiles. Si la demande est hors finance/business, recadre poliment en une phrase. Ne fournis pas de code de programmation; si une demande de code arrive, propose plutot une explication metier ou une formule financiere. Pour un tableau, reste compact: 3 a 5 colonnes, libelles courts, cellules courtes. Regles obligatoires pour les tableaux Markdown: la deuxieme ligne ne doit contenir que des tirets et des pipes; toutes les lignes doivent avoir le meme nombre de colonnes; ne jamais melanger texte et tableau sur la meme ligne. Ne recommence jamais le meme bloc ni la meme phrase.'
 const DEGENERATE_MESSAGE =
   "La reponse du modele a ete interrompue car elle contenait des fragments incoherents. Reformule la demande sur un cas finance/business, ou change de modele dans les Reglages."
 const REPETITION_MESSAGE =
