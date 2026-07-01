@@ -373,6 +373,56 @@ button {
   color: var(--danger);
 }
 
+.msg-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.msg-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  margin-top: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.msg-assistant:hover .msg-actions,
+.msg-actions.is-visible {
+  opacity: 1;
+}
+
+.action-btn {
+  border: none;
+  background: none;
+  color: var(--text-faint);
+  padding: 5px;
+  border-radius: 7px;
+  display: grid;
+  place-items: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.action-btn:hover {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.action-btn.is-up {
+  color: var(--accent);
+}
+
+.action-btn.is-down {
+  color: var(--danger);
+}
+
+.action-btn.is-active {
+  color: var(--accent);
+}
+
 /* ---------- Markdown ---------- */
 .markdown p {
   margin: 0 0 12px;

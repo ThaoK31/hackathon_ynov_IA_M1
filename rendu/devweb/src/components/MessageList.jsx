@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import Message from './Message.jsx'
 import TypingIndicator from './TypingIndicator.jsx'
 
-export default function MessageList({ messages, streaming }) {
+export default function MessageList({ messages, streaming, onRegenerate, onFeedback }) {
   const containerRef = useRef(null)
   const endRef = useRef(null)
   const stick = useRef(true) // faut-il suivre le bas automatiquement ?
@@ -17,6 +17,14 @@ export default function MessageList({ messages, streaming }) {
   useEffect(() => {
     if (stick.current) endRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, streaming])
+
+  let lastAssistant = -1
+  for (let k = messages.length - 1; k >= 0; k -= 1) {
+    if (messages[k].role === 'assistant') {
+      lastAssistant = k
+      break
+    }
+  }
 
   return (
     <div className="messages" ref={containerRef} onScroll={onScroll}>
@@ -33,7 +41,15 @@ export default function MessageList({ messages, streaming }) {
               </div>
             )
           }
-          return <Message key={m.id} {...m} />
+          return (
+            <Message
+              key={m.id}
+              {...m}
+              canRetry={i === lastAssistant && !streaming}
+              onRegenerate={onRegenerate}
+              onFeedback={(value) => onFeedback(m.id, value)}
+            />
+          )
         })}
         <div ref={endRef} />
       </div>

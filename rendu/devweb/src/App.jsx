@@ -82,23 +82,13 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [newConversation])
 
-  const send = useCallback(
-    async (text) => {
-      if (streaming || !text.trim()) return
-
-      let conv = active
-      if (!conv) conv = newConversation()
-      const convId = conv.id
-
-      const userMsg = { id: uid(), role: 'user', content: text }
+  // Coeur de la generation : ajoute une reponse assistant vide au contexte fourni
+  // (qui doit se terminer par un message user) puis streame dedans.
+  const runAssistant = useCallback(
+    async (convId, context) => {
       const asstMsg = { id: uid(), role: 'assistant', content: '' }
-
       setConversations((prev) =>
-        prev.map((c) =>
-          c.id !== convId
-            ? c
-            : { ...c, title: c.title || titleFrom(text), messages: [...c.messages, userMsg, asstMsg] },
-        ),
+        prev.map((c) => (c.id !== convId ? c : { ...c, messages: [...context, asstMsg] })),
       )
 
       setStreaming(true)
@@ -106,10 +96,9 @@ export default function App() {
       abortRef.current = controller
 
       try {
-        const history = [...conv.messages, userMsg].map(({ role, content }) => ({ role, content }))
         await streamChat({
           model: settings.model,
-          messages: history,
+          messages: context.map((m) => ({ role: m.role, content: m.content })),
           systemPrompt: settings.systemPrompt,
           temperature: settings.temperature,
           maxTokens: settings.maxTokens,
@@ -118,10 +107,7 @@ export default function App() {
         })
       } catch (err) {
         if (err.name === 'AbortError') {
-          updateMessage(convId, asstMsg.id, (m) => ({
-            ...m,
-            content: m.content || '_Generation interrompue._',
-          }))
+          updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: m.content || '_Generation interrompue._' }))
         } else {
           updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: err.message, isError: true }))
         }
@@ -130,7 +116,38 @@ export default function App() {
         abortRef.current = null
       }
     },
-    [active, streaming, settings, newConversation, updateMessage],
+    [settings, updateMessage],
+  )
+
+  const send = useCallback(
+    async (text) => {
+      if (streaming || !text.trim()) return
+      let conv = active
+      if (!conv) conv = newConversation()
+      const userMsg = { id: uid(), role: 'user', content: text }
+      if (!conv.title) {
+        setConversations((prev) => prev.map((c) => (c.id !== conv.id ? c : { ...c, title: titleFrom(text) })))
+      }
+      await runAssistant(conv.id, [...conv.messages, userMsg])
+    },
+    [active, streaming, newConversation, runAssistant],
+  )
+
+  // Regenere la derniere reponse de l'assistant.
+  const regenerate = useCallback(async () => {
+    if (streaming || !active) return
+    const msgs = active.messages
+    const end = msgs.length && msgs[msgs.length - 1].role === 'assistant' ? msgs.length - 1 : msgs.length
+    const context = msgs.slice(0, end)
+    if (!context.length || context[context.length - 1].role !== 'user') return
+    await runAssistant(active.id, context)
+  }, [active, streaming, runAssistant])
+
+  const setFeedback = useCallback(
+    (convId, msgId, value) => {
+      updateMessage(convId, msgId, (m) => ({ ...m, feedback: m.feedback === value ? null : value }))
+    },
+    [updateMessage],
   )
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
@@ -167,7 +184,13 @@ export default function App() {
         </header>
 
         {hasMessages ? (
-          <MessageList key={active.id} messages={active.messages} streaming={streaming} />
+          <MessageList
+            key={active.id}
+            messages={active.messages}
+            streaming={streaming}
+            onRegenerate={regenerate}
+            onFeedback={(msgId, value) => setFeedback(active.id, msgId, value)}
+          />
         ) : (
           <EmptyState onPick={send} />
         )}
