@@ -118,7 +118,7 @@ export default function App() {
       abortRef.current = controller
 
       try {
-        await streamChat({
+        const { metrics } = await streamChat({
           model: settings.model,
           messages: context.map((m) => ({ role: m.role, content: expandUserContent(m) })),
           systemPrompt: settings.systemPrompt,
@@ -128,6 +128,9 @@ export default function App() {
           onToken: (tok) => updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: m.content + tok })),
           onReplace: (text) => updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: text })),
         })
+        if (metrics) {
+          updateMessage(convId, asstMsg.id, (m) => ({ ...m, metrics }))
+        }
       } catch (err) {
         if (err.name === 'AbortError') {
           updateMessage(convId, asstMsg.id, (m) => ({ ...m, content: m.content || '_Generation interrompue._' }))
