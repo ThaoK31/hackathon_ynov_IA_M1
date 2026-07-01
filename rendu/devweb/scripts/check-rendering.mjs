@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { renderMarkdown } from '../src/lib/markdown.js'
 import { getLocalGuardReply } from '../src/lib/ollama.js'
 import { DEFAULT_SETTINGS, loadConversations, loadSettings, pickAvailableModel } from '../src/lib/storage.js'
+import { conversationToMarkdown } from '../src/lib/export.js'
 
 globalThis.localStorage = {
   getItem(key) {
@@ -81,5 +82,17 @@ assert.equal(
   null,
   'laisser passer une demande finance normale',
 )
+
+const md = conversationToMarkdown({
+  title: 'Test export',
+  createdAt: 0,
+  messages: [
+    { role: 'user', content: 'Bonjour' },
+    { role: 'assistant', content: 'Salut' },
+  ],
+})
+assert.match(md, /# Test export/, 'titre en markdown')
+assert.match(md, /## Vous/, 'role utilisateur')
+assert.match(md, /## Assistant/, 'role assistant')
 
 console.log('Rendering checks OK')
