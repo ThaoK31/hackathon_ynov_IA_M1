@@ -26,20 +26,36 @@ function inline(s) {
 
 // Une ligne de separation de tableau : |---|:--:|---| (contient au moins un tiret).
 const isTableSep = (l) => l.includes('-') && /^\s*\|?[\s:|-]+\|?\s*$/.test(l)
-const isTableRow = (l) => l.includes('|')
+const isTableRow = (l) => (l.match(/\|/g) || []).length >= 2
 const codeFence = (l) => l.trim().startsWith('```')
 
 function tableCells(line) {
   let s = line.trim()
   if (s.startsWith('|')) s = s.slice(1)
   if (s.endsWith('|')) s = s.slice(0, -1)
-  return s.split('|').map((c) => c.trim())
+  const cells = s.split('|').map((c) => c.trim())
+  // Supprime les cellules vides creees par des || en debut/fin de ligne.
+  while (cells.length && cells[0] === '') cells.shift()
+  while (cells.length && cells[cells.length - 1] === '') cells.pop()
+  return cells
+}
+
+// Le modele fusionne parfois la ligne de separation avec la premiere ligne de
+// donnees : "|---|---|---|| A | B |". On la coupe en deux pour recuperer un
+// tableau valide.
+function repairTableLine(line) {
+  const m = line.match(/^(\|[-:\s|]+\|)(\s*\|.*)$/)
+  if (m) return `${m[1]}\n${m[2].trim()}`
+  return line
 }
 
 function normalizeMarkdown(text) {
   return text
     .replace(/\r\n?/g, '\n')
     .replace(/```([a-zA-Z0-9_-]*)/g, '\n```$1\n')
+    .split('\n')
+    .map(repairTableLine)
+    .join('\n')
     .replace(/\n{3,}/g, '\n\n')
 }
 
