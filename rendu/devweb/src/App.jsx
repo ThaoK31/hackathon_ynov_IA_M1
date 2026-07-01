@@ -5,9 +5,11 @@ import EmptyState from './components/EmptyState.jsx'
 import MessageList from './components/MessageList.jsx'
 import Composer from './components/Composer.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
+import CommandPalette from './components/CommandPalette.jsx'
 import { checkConnection, getLocalGuardReply, streamChat } from './lib/ollama.js'
 import * as store from './lib/storage.js'
 import { expandUserContent } from './lib/attachments.js'
+import { downloadMarkdown } from './lib/export.js'
 
 const uid = () =>
   crypto?.randomUUID ? crypto.randomUUID() : `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -23,6 +25,7 @@ export default function App() {
   const [connection, setConnection] = useState({ checking: true, ok: false, models: [], latencyMs: null, error: null })
   const [streaming, setStreaming] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [paletteOpen, setPaletteOpen] = useState(false)
   const [sidebarOpen, setSidebarOpen] = useState(() => typeof window === 'undefined' || window.innerWidth > 760)
   const abortRef = useRef(null)
 
@@ -83,17 +86,17 @@ export default function App() {
     )
   }, [])
 
-  // Raccourci clavier : Ctrl/Cmd + K -> nouvelle conversation.
+  // Raccourci clavier : Ctrl/Cmd + K -> palette de commandes.
   useEffect(() => {
     const onKey = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault()
-        openNewConversation()
+        setPaletteOpen((open) => !open)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [openNewConversation])
+  }, [])
 
   // Coeur de la generation : ajoute une reponse assistant vide au contexte fourni
   // (qui doit se terminer par un message user) puis streame dedans.
@@ -217,6 +220,21 @@ export default function App() {
 
   const stop = useCallback(() => abortRef.current?.abort(), [])
 
+  const copyLastResponse = useCallback(async () => {
+    const last = active ? [...active.messages].reverse().find((m) => m.role === 'assistant' && !m.isError) : null
+    if (!last?.content) return
+    try {
+      await navigator.clipboard.writeText(last.content)
+    } catch {
+      /* presse-papier indisponible */
+    }
+  }, [active])
+
+  const exportActive = useCallback(() => {
+    if (!active) return
+    downloadMarkdown(active)
+  }, [active])
+
   const hasMessages = active && active.messages.length > 0
   const lastUserMessage = active
     ? [...active.messages].reverse().find((m) => m.role === 'user')?.content ?? ''
@@ -284,6 +302,18 @@ export default function App() {
           }}
         />
       )}
+
+      <CommandPalette
+        open={paletteOpen}
+        theme={theme}
+        active={hasMessages}
+        onClose={() => setPaletteOpen(false)}
+        onNewConversation={openNewConversation}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onToggleTheme={() => setTheme((t) => (t === 'dark' ? 'light' : 'dark'))}
+        onCopyLastResponse={copyLastResponse}
+        onExport={exportActive}
+      />
     </div>
   )
 }

@@ -1244,6 +1244,75 @@ textarea:focus-visible {
   opacity: 0.9;
 }
 
+/* ---------- Command palette ---------- */
+.command-palette {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+  width: min(560px, calc(100vw - 32px));
+  max-height: min(480px, calc(100vh - 120px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: rise 0.15s ease-out;
+}
+
+.command-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  padding: 18px 20px;
+  outline: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.command-input::placeholder {
+  color: var(--text-faint);
+}
+
+.command-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+}
+
+.command-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--text);
+  font-size: 14px;
+  transition: background 0.1s;
+}
+
+.command-item.is-selected,
+.command-item:hover:not(.is-disabled) {
+  background: var(--hover);
+}
+
+.command-item.is-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.command-shortcut {
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text-faint);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 7px;
+}
+
 /* ---------- Animations ---------- */
 @keyframes pulse {
   0%,
