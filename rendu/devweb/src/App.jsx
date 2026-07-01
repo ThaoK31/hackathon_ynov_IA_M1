@@ -6,7 +6,7 @@ import MessageList from './components/MessageList.jsx'
 import Composer from './components/Composer.jsx'
 import SettingsPanel from './components/SettingsPanel.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
-import { checkConnection, getLocalGuardReply, streamChat } from './lib/ollama.js'
+import { checkConnection, getLocalGuardReply, setEndpoint, streamChat } from './lib/ollama.js'
 import * as store from './lib/storage.js'
 import { expandUserContent } from './lib/attachments.js'
 import { downloadMarkdown } from './lib/export.js'
@@ -49,8 +49,9 @@ export default function App() {
   // Health-check du serveur d'inference (au demarrage puis toutes les 15 s)
   useEffect(() => {
     let alive = true
+    setEndpoint(settings.endpoint)
     const ping = async () => {
-      const res = await checkConnection()
+      const res = await checkConnection(settings.model)
       if (alive) setConnection({ checking: false, ...res })
     }
     ping()
@@ -59,7 +60,7 @@ export default function App() {
       alive = false
       clearInterval(id)
     }
-  }, [])
+  }, [settings.model, settings.endpoint])
 
   const active = conversations.find((c) => c.id === activeId) || null
 

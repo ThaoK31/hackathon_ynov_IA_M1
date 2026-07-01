@@ -25,6 +25,17 @@ export default function SettingsPanel({ settings, models, onSave, onClose }) {
         </div>
 
         <label className="field">
+          <span className="field-label">URL du serveur</span>
+          <input
+            type="url"
+            value={draft.endpoint}
+            placeholder="Vide = serveur du .env, sinon Ollama local"
+            onChange={(e) => set('endpoint', e.target.value)}
+          />
+          <small>Reglable a chaud (sans redemarrer). Si l'URL ne repond pas, bascule automatique sur le Ollama local.</small>
+        </label>
+
+        <label className="field">
           <span className="field-label">Modele</span>
           {models.length > 0 ? (
             <select value={draft.model} onChange={(e) => set('model', e.target.value)}>
